@@ -21,7 +21,7 @@ INDEX_HTML = """<!DOCTYPE html>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: system-ui, sans-serif; background: #111; color: #eee; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-        .container { background: #1a1a1a; padding: 2rem; border-radius: 12px; width: 400px; box-shadow: 0 4px 24px rgba(0,0,0,0.4); }
+        .container { background: #1a1a1a; padding: 2rem; border-radius: 12px; width: 420px; box-shadow: 0 4px 24px rgba(0,0,0,0.4); }
         h1 { font-size: 1.4rem; margin-bottom: 1.5rem; text-align: center; }
         .section { margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #333; border-radius: 8px; }
         .section h2 { font-size: 0.9rem; color: #888; margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
@@ -32,42 +32,80 @@ INDEX_HTML = """<!DOCTYPE html>
         .download-btn { background: #16a34a; margin-top: 0.75rem; }
         .download-btn:hover { background: #15803d; }
         .status { margin-top: 0.75rem; font-size: 0.85rem; color: #aaa; min-height: 1.2em; }
+        .error { color: #ef4444; }
+        .warning { background: #1c1917; border: 1px solid #78350f; border-radius: 6px; padding: 0.75rem; margin-bottom: 1.5rem; font-size: 0.8rem; color: #fbbf24; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>File Push</h1>
+        <div class="warning">
+            Files are temporary and lost on server restart. Download promptly after uploading.
+        </div>
         <div class="section">
             <h2>Upload</h2>
             <input type="file" id="fileInput">
-            <button onclick="uploadFile()">Upload</button>
+            <button id="uploadBtn" onclick="uploadFile()">Upload</button>
             <div class="status" id="uploadStatus"></div>
         </div>
         <div class="section">
             <h2>Download</h2>
-            <button class="download-btn" onclick="downloadFile()">Download Last File</button>
+            <button class="download-btn" id="downloadBtn" onclick="downloadFile()">Download Last File</button>
             <div class="status" id="downloadStatus"></div>
         </div>
     </div>
     <script>
         function uploadFile() {
-            const file = document.getElementById('fileInput').files[0];
+            var file = document.getElementById('fileInput').files[0];
             if (!file) { document.getElementById('uploadStatus').textContent = 'Select a file first'; return; }
-            const status = document.getElementById('uploadStatus');
-            const btn = document.querySelector('button');
-            btn.disabled = true; status.textContent = 'Uploading...';
-            const xhr = new XMLHttpRequest();
+            var status = document.getElementById('uploadStatus');
+            var btn = document.getElementById('uploadBtn');
+            btn.disabled = true; status.textContent = 'Uploading...'; status.className = 'status';
+            var xhr = new XMLHttpRequest();
             xhr.open('POST', '/upload?filename=' + encodeURIComponent(file.name));
             xhr.onload = function() {
-                const res = JSON.parse(xhr.responseText);
-                status.textContent = 'Uploaded: ' + res.filename + ' (' + res.size_bytes + ' bytes)';
+                if (xhr.status === 200) {
+                    var res = JSON.parse(xhr.responseText);
+                    status.textContent = 'Uploaded: ' + res.filename + ' (' + res.size_bytes + ' bytes)';
+                } else {
+                    status.textContent = 'Upload failed: ' + xhr.statusText;
+                    status.className = 'status error';
+                }
                 btn.disabled = false;
             };
-            xhr.onerror = function() { status.textContent = 'Upload failed'; btn.disabled = false; };
+            xhr.onerror = function() { status.textContent = 'Upload failed'; status.className = 'status error'; btn.disabled = false; };
             xhr.send(file);
         }
         function downloadFile() {
-            window.location.href = '/download';
+            var status = document.getElementById('downloadStatus');
+            var btn = document.getElementById('downloadBtn');
+            status.textContent = 'Downloading...'; status.className = 'status';
+            btn.disabled = true;
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/download');
+            xhr.responseType = 'blob';
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    var disposition = xhr.getResponseHeader('Content-Disposition');
+                    var filename = 'download';
+                    if (disposition) {
+                        var match = disposition.match(/filename="?([^"]+)"?/);
+                        if (match) filename = match[1];
+                    }
+                    var a = document.createElement('a');
+                    a.href = URL.createObjectURL(xhr.response);
+                    a.download = filename;
+                    a.click();
+                    URL.revokeObjectURL(a.href);
+                    status.textContent = 'Downloaded: ' + filename;
+                } else {
+                    status.textContent = 'No file available to download';
+                    status.className = 'status error';
+                }
+                btn.disabled = false;
+            };
+            xhr.onerror = function() { status.textContent = 'Download failed'; status.className = 'status error'; btn.disabled = false; };
+            xhr.send();
         }
     </script>
 </body>
